@@ -1,0 +1,11 @@
+refactor: modularize UI and fix qdrant schema
+
+- Removed manual Qdrant collection pre-creation in core/database.py to allow FastEmbed to automatically configure native vector schemas during client.add().
+- Added collection existence checks to the database clearance logic to prevent exceptions on empty collections.
+- Decomposed monolithic app.py into a modular clean architecture:
+  - ui/sidebar.py: Encapsulates file uploader and DB maintenance components.
+  - ui/chat.py: Encapsulates chat history rendering and RAG query pipeline.
+  - ui/styling.py: Centralizes CSS injections for fonts and component styling.
+- Introduced core/session.py to centralize Streamlit session state management with standardized getter/setter functions.
+- Improved UX by applying CSS rules to right-align user messages for a traditional chat interface layout.
+- Enabled HTML rendering in LLM assistant responses (unsafe_allow_html=True) to fix raw <br> tags appearing in generated markdown tables.
