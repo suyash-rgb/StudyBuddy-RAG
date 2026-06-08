@@ -51,9 +51,7 @@ coverage.xml
 .pytest_cache/
 
 # Streamlit specific
-.streamlit/secrets.toml
-# You might want to ignore the whole .streamlit directory if you don't want to track config.toml
-# .streamlit/
+.streamlit/
 
 # Virtual Environments
 venv/
