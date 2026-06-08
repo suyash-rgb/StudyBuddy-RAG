@@ -1,5 +1,12 @@
+import os
 from typing import List, Dict, Any
 import fitz  # PyMuPDF
+
+# Dynamically add Tesseract to PATH and set TESSDATA_PREFIX for Windows users
+TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR"
+if os.path.exists(TESSERACT_PATH):
+    os.environ["PATH"] += os.pathsep + TESSERACT_PATH
+    os.environ["TESSDATA_PREFIX"] = os.path.join(TESSERACT_PATH, "tessdata")
 
 def parse_pdf(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
     """
