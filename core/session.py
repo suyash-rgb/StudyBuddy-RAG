@@ -4,6 +4,8 @@ def init_session_state():
     """Initializes the required session state variables if they do not exist."""
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "indexed_files" not in st.session_state:
+        st.session_state.indexed_files = []
 
 def get_messages():
     """Returns the current list of chat messages."""
@@ -19,3 +21,15 @@ def add_message(role: str, content: str, references: list = None):
 def clear_messages():
     """Clears the chat history from the session state."""
     st.session_state.messages = []
+
+def get_indexed_files():
+    return st.session_state.get("indexed_files", [])
+
+def add_indexed_file(filename: str):
+    if "indexed_files" not in st.session_state:
+        st.session_state.indexed_files = []
+    if filename not in st.session_state.indexed_files:
+        st.session_state.indexed_files.append(filename)
+
+def clear_indexed_files():
+    st.session_state.indexed_files = []

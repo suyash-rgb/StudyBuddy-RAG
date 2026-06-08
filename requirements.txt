@@ -3,3 +3,10 @@ qdrant-client[fastembed]
 pymupdf
 groq
 python-dotenv
+markdown
+python-docx
+pandas
+openpyxl
+python-pptx
+Pillow
+pytesseract

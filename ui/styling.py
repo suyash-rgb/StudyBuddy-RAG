@@ -47,5 +47,14 @@ def inject_custom_css():
         [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) [data-testid="stMarkdownContainer"] {
             text-align: right;
         }
+        
+        /* Hide the scrollbar in the sidebar but maintain positioning */
+        [data-testid="stSidebar"] ::-webkit-scrollbar {
+            display: none;
+        }
+        [data-testid="stSidebar"] {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
     </style>
     """, unsafe_allow_html=True)

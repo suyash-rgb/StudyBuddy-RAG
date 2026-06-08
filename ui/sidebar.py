@@ -1,9 +1,8 @@
 import logging
 import streamlit as st
 from qdrant_client import QdrantClient
-from core.parser import parse_pdf
-from core.session import clear_messages
-
+from core.parser import parse_document
+from core.session import clear_messages, add_indexed_file, clear_indexed_files
 logger = logging.getLogger(__name__)
 
 def render_sidebar(client: QdrantClient):
@@ -12,10 +11,11 @@ def render_sidebar(client: QdrantClient):
         # Use vh (viewport height) for responsive vertical centering without scrollbars
         st.markdown("<div style='height: 20vh;'></div>", unsafe_allow_html=True)
         
+        
         st.markdown("### 📤 Upload Study Material")
         uploaded_files = st.file_uploader(
-            "Upload PDF Lecture Notes, Textbooks, or Slides",
-            type=["pdf"],
+            "Upload Lecture Notes, Textbooks, Slides or Images",
+            type=["pdf", "docx", "xlsx", "csv", "txt", "jsonl", "pptx", "png", "jpg", "jpeg"],
             accept_multiple_files=True
         )
         
@@ -42,6 +42,7 @@ def _handle_clear_database(client: QdrantClient):
             
             st.success("Database successfully cleared!")
             clear_messages()
+            clear_indexed_files()
             st.rerun()
         except Exception as e:
             logger.error(f"Error clearing database: {e}")
@@ -56,7 +57,7 @@ def _handle_process_documents(client: QdrantClient, uploaded_files):
     elif not client:
         st.sidebar.error("Database client is not available.")
     else:
-        with st.spinner("Parsing PDFs & Indexing with FastEmbed ONNX..."):
+        with st.spinner("Parsing documents & Indexing with FastEmbed ONNX..."):
             documents = []
             metadatas = []
             
@@ -64,10 +65,12 @@ def _handle_process_documents(client: QdrantClient, uploaded_files):
                 try:
                     logger.info(f"Reading and parsing uploaded file: {file.name}")
                     file_bytes = file.read()
-                    parsed_pages = parse_pdf(file_bytes, file.name)
+                    parsed_pages = parse_document(file_bytes, file.name)
                     
                     for page in parsed_pages:
-                        documents.append(page["text"])
+                        # Prepend filename to the indexed text to significantly improve semantic matching for file-specific queries
+                        enhanced_text = f"Document Name: {file.name}\n\n{page['text']}"
+                        documents.append(enhanced_text)
                         metadatas.append({
                             "filename": page["filename"],
                             "page_num": page["page_num"]
@@ -86,6 +89,10 @@ def _handle_process_documents(client: QdrantClient, uploaded_files):
                         documents=documents,
                         metadata=metadatas
                     )
+                    
+                    for file in uploaded_files:
+                        add_indexed_file(file.name)
+                        
                     logger.info("Indexing completed successfully!")
                     st.sidebar.success(f"Successfully indexed {len(documents)} pages from {len(uploaded_files)} file(s)!")
                 except Exception as upload_err:
