@@ -68,6 +68,9 @@ except Exception as e:
 
 # Sidebar dashboard
 with st.sidebar:
+    # Push content to the vertical middle of the sidebar
+    st.markdown("<br>" * 12, unsafe_allow_html=True)
+    
     st.markdown("### 📤 Upload Study Material")
     uploaded_files = st.file_uploader(
         "Upload PDF Lecture Notes, Textbooks, or Slides",
