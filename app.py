@@ -1,6 +1,11 @@
 import os
+import logging
 import streamlit as st
 from dotenv import load_dotenv
+
+# Configure application logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file at application startup
 load_dotenv()
@@ -62,8 +67,10 @@ st.subheader("Lightweight Academic Study Assistant")
 # Initialize database client
 client = None
 try:
+    logger.info("Attempting to initialize Qdrant database client...")
     client = get_qdrant_client()
 except Exception as e:
+    logger.error(f"Failed to initialize local Qdrant client: {e}")
     st.error(f"Failed to initialize local Qdrant client: {e}")
 
 # Sidebar dashboard
@@ -85,17 +92,17 @@ with st.sidebar:
     if st.button("Clear Vector Database", use_container_width=True, type="secondary"):
         if client:
             try:
+                logger.info("User requested to clear the vector database.")
+                # By simply deleting the collection, client.add() will recreate it automatically 
+                # with the correct FastEmbed configuration when new docs are uploaded!
                 client.delete_collection("academic_notes")
-                # Re-create database configuration
-                from qdrant_client.models import Distance, VectorParams
-                client.create_collection(
-                    collection_name="academic_notes",
-                    vectors_config=VectorParams(size=384, distance=Distance.COSINE)
-                )
+                logger.info("Collection 'academic_notes' successfully deleted.")
+                
                 st.success("Database successfully cleared!")
                 st.session_state.messages = []
                 st.rerun()
             except Exception as e:
+                logger.error(f"Error clearing database: {e}")
                 st.error(f"Error clearing database: {e}")
         else:
             st.warning("Database client not initialized.")
@@ -113,6 +120,7 @@ if process_btn:
             
             for file in uploaded_files:
                 try:
+                    logger.info(f"Reading and parsing uploaded file: {file.name}")
                     file_bytes = file.read()
                     parsed_pages = parse_pdf(file_bytes, file.name)
                     
@@ -122,19 +130,24 @@ if process_btn:
                             "filename": page["filename"],
                             "page_num": page["page_num"]
                         })
+                    logger.info(f"Successfully extracted {len(parsed_pages)} pages from {file.name}")
                 except Exception as parse_err:
+                    logger.error(f"Error parsing {file.name}: {parse_err}")
                     st.sidebar.error(f"Error parsing {file.name}: {parse_err}")
             
             if documents:
                 try:
+                    logger.info(f"Adding {len(documents)} documents to Qdrant collection 'academic_notes'...")
                     # Implicitly compute embeddings using FastEmbed BGE Small and add to local database
                     client.add(
                         collection_name="academic_notes",
                         documents=documents,
                         metadata=metadatas
                     )
+                    logger.info("Indexing completed successfully!")
                     st.sidebar.success(f"Successfully indexed {len(documents)} pages from {len(uploaded_files)} file(s)!")
                 except Exception as upload_err:
+                    logger.error(f"Failed indexing vectors: {upload_err}")
                     st.sidebar.error(f"Failed indexing vectors: {upload_err}")
             else:
                 st.sidebar.warning("No readable text content extracted from the uploaded files.")
@@ -163,6 +176,7 @@ if query := st.chat_input("Ask a question about your study documents..."):
     # RAG Logic
     if not client:
         with st.chat_message("assistant"):
+            logger.warning("Query rejected because Qdrant client is not available.")
             st.error("Database client is not available. Check configuration details.")
     else:
         with st.spinner("Querying local vector database & invoking Groq LLM..."):
@@ -175,19 +189,22 @@ if query := st.chat_input("Ask a question about your study documents..."):
                 
             if points_count == 0:
                 with st.chat_message("assistant"):
-                    st.warning("⚠️ No documents indexed yet. Please upload study materials in the sidebar and click 'Process & Index Documents' first.")
+                    logger.info("Query rejected because database is empty.")
+                    st.warning("⚠️ No documents indexed yet. Please upload study materials in the sidebar and click 'Process Documents' first.")
                 st.session_state.messages.append({
                     "role": "assistant", 
-                    "content": "⚠️ No documents indexed yet. Please upload study materials in the sidebar and click 'Process & Index Documents' first."
+                    "content": "⚠️ No documents indexed yet. Please upload study materials in the sidebar and click 'Process Documents' first."
                 })
             else:
                 try:
+                    logger.info(f"Querying Qdrant for similar context to: '{query}'")
                     # Semantic search via FastEmbed (implicitly calls BAAI/bge-small-en-v1.5 to embed query)
                     results = client.query(
                         collection_name="academic_notes",
                         query_text=query,
                         limit=3
                     )
+                    logger.info(f"Retrieved {len(results)} context blocks from database.")
                     
                     context_blocks = []
                     references = []

@@ -1,6 +1,9 @@
 import os
 import streamlit as st
+import logging
 from groq import Groq
+
+logger = logging.getLogger(__name__)
 
 @st.cache_resource
 def get_groq_client() -> Groq:

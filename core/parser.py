@@ -1,6 +1,9 @@
 import os
+import logging
 from typing import List, Dict, Any
 import fitz  # PyMuPDF
+
+logger = logging.getLogger(__name__)
 
 # Dynamically add Tesseract to PATH and set TESSDATA_PREFIX for Windows users
 TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR"
@@ -26,9 +29,12 @@ def parse_pdf(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
     parsed_pages = []
     
     try:
+        logger.info(f"Opening PDF file '{filename}' from memory stream...")
         # Open PDF from memory bytes
         doc = fitz.open(stream=file_bytes, filetype="pdf")
+        logger.info(f"Successfully opened '{filename}' containing {len(doc)} pages.")
     except Exception as e:
+        logger.error(f"Failed to open PDF file '{filename}': {str(e)}")
         raise ValueError(f"Could not open PDF file '{filename}': {str(e)}")
     
     for page_idx in range(len(doc)):
@@ -44,6 +50,7 @@ def parse_pdf(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
         # Smart Heuristic Fallback to OCR
         # If character count is less than 50, trigger Tesseract OCR via PyMuPDF
         if len(text) < 50:
+            logger.info(f"Page {page_num} of {filename} yielded unusually low text ({len(text)} chars). Engaging Tesseract OCR fallback.")
             try:
                 # Attempt to get text page using PyMuPDF's Tesseract OCR bindings
                 textpage = page.get_textpage_ocr(language="eng")
@@ -51,8 +58,12 @@ def parse_pdf(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
                 
                 # Check if OCR succeeded in retrieving more content
                 if len(ocr_text) > len(text):
+                    logger.info(f"OCR successful on page {page_num}. Extracted {len(ocr_text)} characters.")
                     text = ocr_text
+                else:
+                    logger.warning(f"OCR ran on page {page_num} but didn't extract any meaningful text.")
             except Exception as ocr_err:
+                logger.error(f"Tesseract OCR failed on page {page_num} (Ensure Tesseract is installed correctly): {ocr_err}")
                 # Fallback to standard extraction if OCR is not available/configured
                 # (e.g., Tesseract not installed on system PATH)
                 pass
