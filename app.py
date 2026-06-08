@@ -13,61 +13,39 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom premium styling
+# Custom styling relying on native Light/Dark themes
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Inter:wght@300;400;500;600&display=swap');
     
+    /* Use a serif font for headings (academic) and Inter for body text */
     html, body, [class*="css"] {
-        font-family: 'Outfit', sans-serif;
+        font-family: 'Inter', sans-serif;
+    }
+    h1, h2, h3 {
+        font-family: 'Lora', serif !important;
     }
     
-    /* Elegant Dark Gradient Background */
-    .stApp {
-        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
-        color: #f1f5f9;
-    }
-    
-    /* Modern Glassmorphic Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: rgba(15, 23, 42, 0.9) !important;
-        backdrop-filter: blur(12px);
-        border-right: 1px solid rgba(255, 255, 255, 0.08);
-    }
-    
-    /* Custom Styling for Action Buttons */
+    /* Academic subtle styling */
     .stButton>button {
-        background: linear-gradient(90deg, #6366f1 0%, #4f46e5 100%) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 8px !important;
-        padding: 0.6rem 1.2rem !important;
-        font-weight: 600 !important;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        border-radius: 6px !important;
+        font-weight: 500 !important;
+        transition: all 0.2s ease-in-out !important;
         width: 100%;
         margin-top: 10px;
     }
     .stButton>button:hover {
         transform: translateY(-2px) !important;
-        box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4) !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
     }
     
-    /* Chat message container styling */
+    /* Chat message separation */
     .stChatMessage {
-        background-color: rgba(30, 41, 59, 0.4) !important;
-        border-radius: 12px;
+        border-radius: 8px;
         padding: 15px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
         margin-bottom: 15px;
-        backdrop-filter: blur(5px);
-    }
-    
-    /* Accent text styling */
-    h1, h2, h3 {
-        background: linear-gradient(to right, #818cf8, #e0e7ff);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-weight: 700;
+        border: 1px solid var(--secondary-background-color);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -90,18 +68,6 @@ except Exception as e:
 
 # Sidebar dashboard
 with st.sidebar:
-    st.markdown("### 🛠️ Configuration Dashboard")
-    
-    # Validate Groq configuration
-    groq_api_key = os.getenv("GROQ_API_KEY")
-    if groq_api_key:
-        st.success("✅ Groq API Key Configured")
-    else:
-        st.error("❌ Groq API Key Missing in .env")
-        
-    st.markdown(f"**LLM Model:** `{os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')}`")
-    st.markdown("---")
-    
     st.markdown("### 📤 Upload Study Material")
     uploaded_files = st.file_uploader(
         "Upload PDF Lecture Notes, Textbooks, or Slides",
