@@ -57,7 +57,7 @@ from core.llm_engine import generate_study_response
 
 # Main application header
 st.title("📚 PdfInsight")
-st.subheader("Lightweight Local-First Academic Study Assistant")
+st.subheader("Lightweight Academic Study Assistant")
 
 # Initialize database client
 client = None
@@ -75,7 +75,7 @@ with st.sidebar:
         accept_multiple_files=True
     )
     
-    process_btn = st.button("Process & Index Documents", use_container_width=True)
+    process_btn = st.button("Process Documents", use_container_width=True)
     
     st.markdown("---")
     st.markdown("### 🧹 Database Maintenance")
