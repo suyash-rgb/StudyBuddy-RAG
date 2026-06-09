@@ -11,11 +11,10 @@ def get_messages():
     """Returns the current list of chat messages."""
     return st.session_state.messages
 
-def add_message(role: str, content: str, references: list = None):
-    """Appends a new message to the session state."""
+def add_message(role: str, content: str, **kwargs):
+    """Appends a new message to the chat history."""
     msg = {"role": role, "content": content}
-    if references:
-        msg["references"] = references
+    msg.update(kwargs)
     st.session_state.messages.append(msg)
 
 def clear_messages():

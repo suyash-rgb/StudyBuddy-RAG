@@ -1,4 +1,6 @@
 import logging
+import os
+import shutil
 import streamlit as st
 from qdrant_client import QdrantClient
 from core.parser import parse_document
@@ -31,24 +33,22 @@ def render_sidebar(client: QdrantClient):
 
 
 def _handle_clear_database(client: QdrantClient):
-    if client:
-        try:
-            logger.info("User requested to clear the vector database.")
-            if client.collection_exists("academic_notes"):
-                client.delete_collection("academic_notes")
-                logger.info("Collection 'academic_notes' successfully deleted.")
-            else:
-                logger.info("Collection 'academic_notes' does not exist. No action needed.")
+    try:
+        logger.info("User requested to clear the vector database.")
+        if client and client.collection_exists("academic_notes"):
+            client.delete_collection("academic_notes")
+        
+        # Delete ephemeral extracted images
+        if os.path.exists("extracted_images"):
+            shutil.rmtree("extracted_images", ignore_errors=True)
             
-            st.success("Database successfully cleared!")
-            clear_messages()
-            clear_indexed_files()
-            st.rerun()
-        except Exception as e:
-            logger.error(f"Error clearing database: {e}")
-            st.error(f"Error clearing database: {e}")
-    else:
-        st.warning("Database client not initialized.")
+        st.success("Database and ephemeral images successfully cleared!")
+        clear_messages()
+        clear_indexed_files()
+        st.rerun()
+    except Exception as e:
+        logger.error(f"Error clearing database: {e}")
+        st.error(f"Error clearing database: {e}")
 
 
 def _handle_process_documents(client: QdrantClient, uploaded_files):

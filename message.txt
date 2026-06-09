@@ -1,18 +1,6 @@
-feat: implement universal doc parsing and RAG context filtering
+feat: implement multimodal hybrid image search
 
-This commit significantly expands the capabilities of the application by allowing multi-format file ingestion and solving critical semantic search clutter issues via a dedicated UI filter.
-
-Detailed changes:
-- **Universal Document Parsing**: 
-  - Added new dependencies (`python-docx`, `pandas`, `openpyxl`, `python-pptx`, `Pillow`, `pytesseract`) to `requirements.txt`.
-  - Refactored `core/parser.py` into a dynamic router that parses PDFs, Word docs, Excel/CSV spreadsheets, PowerPoints, JSONL, and raw text.
-  - Integrated `pytesseract` to natively run OCR on uploaded `.png`, `.jpg`, and `.jpeg` study images.
-  - Updated `ui/sidebar.py` file uploader to accept all newly supported formats.
-- **RAG Context Filtering**:
-  - Implemented `indexed_files` state management in `core/session.py`.
-  - Built a "Search Context" dropdown in `ui/chat.py` allowing users to filter searches to a specific file.
-  - Linked the selected file to a Qdrant `models.Filter` to strictly constrain semantic retrieval, bypassing the standard RAG limitation where generic queries retrieve old database context.
-  - Pre-pended filenames to the indexed text before FastEmbed processing to natively increase semantic relevance.
-- **UI & Layout Polish**:
-  - Surgically removed the Streamlit sidebar scrollbar using custom CSS (`::-webkit-scrollbar`) in `ui/styling.py` while maintaining vertical centering of components.
-  - Safely clear the `indexed_files` session state upon database deletion.
+- Replace fragile regex image interception with robust LLM JSON intent classification
+- Add 3-tier image routing: Explicit page, Computed "last" page, and Semantic Vector Search
+- Implement ephemeral storage cleanup for extracted images on database reset
+- Dynamically load Groq model from .env to prevent decommissioned model errors

@@ -76,9 +76,27 @@ def _parse_pdf(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
     except Exception as e:
         raise ValueError(f"Could not open PDF file '{filename}': {str(e)}")
         
+    # Create directory for extracting images specific to this PDF
+    img_dir = os.path.join("extracted_images", filename)
+    os.makedirs(img_dir, exist_ok=True)
+        
     for page_idx in range(len(doc)):
         page = doc[page_idx]
         page_num = page_idx + 1
+        
+        # Extract all embedded images from the page natively
+        for img_idx, img in enumerate(page.get_images(full=True)):
+            xref = img[0]
+            try:
+                base_image = doc.extract_image(xref)
+                image_bytes = base_image["image"]
+                image_ext = base_image["ext"]
+                img_filename = f"page_{page_num}_img_{img_idx}.{image_ext}"
+                img_path = os.path.join(img_dir, img_filename)
+                with open(img_path, "wb") as f:
+                    f.write(image_bytes)
+            except Exception as img_err:
+                logger.warning(f"Failed to extract image {img_idx} on page {page_num} of {filename}: {img_err}")
         
         try:
             text = page.get_text().strip()

@@ -64,3 +64,50 @@ def generate_study_response(query: str, context: str) -> str:
         return completion.choices[0].message.content
     except Exception as e:
         return f"⚠️ **Error invoking Groq API:** {str(e)}"
+
+import json
+
+def classify_image_intent(query: str) -> dict:
+    """
+    Uses the Groq LLM to quickly determine if the user is asking to see images, 
+    and if they specified a page number.
+    Returns a dict: {"is_image_query": bool, "page_num": int | None}
+    """
+    try:
+        client = get_groq_client()
+    except ValueError:
+        return {"is_image_query": False, "page_num": None}
+        
+    system_prompt = (
+        "You are an intent classification engine. Analyze the user's query and determine "
+        "if they are asking to view, see, display, or show images/figures from a document. "
+        "If they specify a specific numeric page number, extract it as an integer. If they ask for the last page, return the exact string 'last'. For any other non-specific page requests (e.g., 'all pages', 'this document'), return null for page_num. "
+        "You must respond ONLY with a valid JSON object matching this exact schema: "
+        '{"is_image_query": true or false, "page_num": int or "last" or null}'
+    )
+    
+    try:
+        model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        completion = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": query}
+            ],
+            model=model,
+            temperature=0,
+            response_format={"type": "json_object"}
+        )
+        content = completion.choices[0].message.content
+        intent = json.loads(content)
+        
+        # Ensure page_num is either an integer, "last", or None
+        if intent.get("page_num") is not None and intent.get("page_num") != "last":
+            try:
+                intent["page_num"] = int(intent["page_num"])
+            except (ValueError, TypeError):
+                intent["page_num"] = None
+                
+        return intent
+    except Exception as e:
+        logger.error(f"Intent classification failed: {e}")
+        return {"is_image_query": False, "page_num": None}
