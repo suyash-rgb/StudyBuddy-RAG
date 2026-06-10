@@ -21,11 +21,11 @@ def render_sidebar(client: QdrantClient):
             accept_multiple_files=True
         )
         
-        process_btn = st.button("Process Documents", use_container_width=True)
+        process_btn = st.button("Process Documents", width="stretch")
         
         st.markdown("---")
         st.markdown("### 🧹 Database Maintenance")
-        if st.button("Clear Vector Database", use_container_width=True, type="secondary"):
+        if st.button("Clear Vector Database", width="stretch", type="secondary"):
             _handle_clear_database(client)
             
         if process_btn:
@@ -53,7 +53,7 @@ def _handle_clear_database(client: QdrantClient):
 
 def _handle_process_documents(client: QdrantClient, uploaded_files):
     if not uploaded_files:
-        st.sidebar.warning("Please upload at least one PDF file first.")
+        st.sidebar.warning("Please upload at least one document first.")
     elif not client:
         st.sidebar.error("Database client is not available.")
     else:

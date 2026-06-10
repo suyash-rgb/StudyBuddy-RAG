@@ -1,6 +1,6 @@
-feat: implement multimodal hybrid image search
+fix: universal image storage and UI deprecation warnings
 
-- Replace fragile regex image interception with robust LLM JSON intent classification
-- Add 3-tier image routing: Explicit page, Computed "last" page, and Semantic Vector Search
-- Implement ephemeral storage cleanup for extracted images on database reset
-- Dynamically load Groq model from .env to prevent decommissioned model errors
+- Fix `core/parser.py` to securely cache embedded image blobs from `.docx` and `.pptx` files to the local ephemeral directory.
+- Update raw image parsers (`.png`, `.jpg`) to correctly cache image files into local storage for hybrid retrieval.
+- Fix Streamlit 1.33+ deprecation warnings globally by replacing `use_container_width=True` with `width="stretch"` across `ui/chat.py` and `ui/sidebar.py`.
+- Update hardcoded 'PDF' upload placeholder string to be universally applicable for all documents.

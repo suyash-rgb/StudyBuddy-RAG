@@ -48,7 +48,7 @@ def render_chat_interface(client: QdrantClient):
                 data=export_conversation_to_pdf(),
                 file_name="conversation_export.pdf",
                 mime="application/pdf",
-                use_container_width=True
+                width="stretch"
             )
 
     # Chat Input & RAG Execution

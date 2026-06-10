@@ -118,6 +118,8 @@ def _parse_pdf(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
     doc.close()
     return parsed_pages
 
+import zipfile
+
 def _parse_docx(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
     if not docx:
         raise ImportError("python-docx is not installed.")
@@ -128,9 +130,36 @@ def _parse_docx(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
         if para.text.strip():
             full_text.append(para.text.strip())
             
+    # Extract images from DOCX (it's a ZIP archive) and run Tesseract OCR
+    img_dir = os.path.join("extracted_images", filename)
+    os.makedirs(img_dir, exist_ok=True)
+    img_idx = 0
+    try:
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as docx_zip:
+            for item in docx_zip.namelist():
+                if item.startswith('word/media/') and item.split('.')[-1].lower() in ['png', 'jpg', 'jpeg']:
+                    try:
+                        image_data = docx_zip.read(item)
+                        
+                        ext = item.split('.')[-1].lower()
+                        img_path = os.path.join(img_dir, f"page_1_img_{img_idx}.{ext}")
+                        with open(img_path, "wb") as f:
+                            f.write(image_data)
+                        img_idx += 1
+                        
+                        if Image and pytesseract:
+                            img = Image.open(io.BytesIO(image_data))
+                            ocr_text = pytesseract.image_to_string(img).strip()
+                            if ocr_text:
+                                full_text.append(f"\n[Embedded Image OCR]:\n{ocr_text}")
+                    except Exception as img_err:
+                        logger.warning(f"Failed to OCR embedded image {item} in {filename}: {img_err}")
+    except zipfile.BadZipFile:
+        logger.warning(f"Could not open {filename} as zip for image extraction.")
+            
     text = "\n".join(full_text)
-    if text:
-        return [{"text": text, "filename": filename, "page_num": 1}]
+    if text.strip():
+        return [{"text": text.strip(), "filename": filename, "page_num": 1}]
     return []
 
 def _parse_excel_csv(file_bytes: bytes, filename: str, ext: str) -> List[Dict[str, Any]]:
@@ -182,11 +211,34 @@ def _parse_pptx(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
         
     prs = Presentation(io.BytesIO(file_bytes))
     parsed_pages = []
+    
+    img_dir = os.path.join("extracted_images", filename)
+    os.makedirs(img_dir, exist_ok=True)
+    
     for i, slide in enumerate(prs.slides):
         slide_text = []
+        img_idx = 0
         for shape in slide.shapes:
             if hasattr(shape, "text") and shape.text.strip():
                 slide_text.append(shape.text.strip())
+            # Handle embedded images in PPTX
+            if getattr(shape, "shape_type", None) == 13: # 13 is msoPicture
+                try:
+                    img_bytes = shape.image.blob
+                    ext = getattr(shape.image, "ext", "png")
+                    
+                    img_path = os.path.join(img_dir, f"page_{i+1}_img_{img_idx}.{ext}")
+                    with open(img_path, "wb") as f:
+                        f.write(img_bytes)
+                    img_idx += 1
+                    
+                    if Image and pytesseract:
+                        img = Image.open(io.BytesIO(img_bytes))
+                        ocr_text = pytesseract.image_to_string(img).strip()
+                        if ocr_text:
+                            slide_text.append(f"\n[Embedded Image OCR]:\n{ocr_text}")
+                except Exception as img_err:
+                    logger.warning(f"Failed to OCR embedded image on slide {i+1} in {filename}: {img_err}")
                 
         text = "\n".join(slide_text).strip()
         if text:
@@ -197,6 +249,14 @@ def _parse_pptx(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
 def _parse_image(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
     if not Image or not pytesseract:
         raise ImportError("Pillow or pytesseract is not installed.")
+        
+    img_dir = os.path.join("extracted_images", filename)
+    os.makedirs(img_dir, exist_ok=True)
+    
+    ext = filename.lower().split('.')[-1]
+    img_path = os.path.join(img_dir, f"page_1_img_0.{ext}")
+    with open(img_path, "wb") as f:
+        f.write(file_bytes)
         
     img = Image.open(io.BytesIO(file_bytes))
     text = pytesseract.image_to_string(img).strip()
