@@ -24,10 +24,15 @@ def add_message(role: str, content: str, **kwargs):
     msg = {"role": role, "content": content}
     msg.update(kwargs)
     st.session_state.messages.append(msg)
+    # Invalidate cached PDF export bytes so it must be regenerated
+    if "pdf_bytes" in st.session_state:
+        del st.session_state.pdf_bytes
 
 def clear_messages():
     """Clears the chat history from the session state."""
     st.session_state.messages = []
+    if "pdf_bytes" in st.session_state:
+        del st.session_state.pdf_bytes
 
 def get_indexed_files():
     return st.session_state.get("indexed_files", [])

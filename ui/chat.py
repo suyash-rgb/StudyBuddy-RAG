@@ -32,39 +32,49 @@ def plantuml_encode(plantuml_text: str) -> str:
     return base64.b64encode(compressed_string).translate(trans_table).decode('utf-8')
 
 def render_mermaid(code: str):
-    """Renders Mermaid diagram in a Streamlit HTML component."""
-    escaped_code = html.escape(code)
-    html_content = f"""
-    <div class="mermaid" style="background-color: transparent;">
-    {escaped_code}
-    </div>
-    <script type="module">
-        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-        mermaid.initialize({{ 
-            startOnLoad: true,
-            theme: 'default',
-            securityLevel: 'loose'
-        }});
-    </script>
-    """
-    components.html(html_content, height=450, scrolling=True)
+    """Renders Mermaid diagram using the remote Mermaid Ink API."""
+    import json
+    import urllib.request
+    from core.export import sanitize_mermaid_code
+    try:
+        code = sanitize_mermaid_code(code)
+        payload = json.dumps({"code": code, "mermaid": {"theme": "default"}}).encode("utf-8")
+        encoded = base64.urlsafe_b64encode(payload).decode("ascii").replace("=", "")
+        url = f"https://mermaid.ink/img/{encoded}"
+        
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            img_data = response.read()
+            
+        b64 = base64.b64encode(img_data).decode('utf-8')
+        st.markdown(f'<div style="text-align: center; margin: 15px 0;"><img src="data:image/jpeg;base64,{b64}" style="max-width: 100%; height: auto; max-height: 500px; display: block; margin: 0 auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"/></div>', unsafe_allow_html=True)
+    except Exception as e:
+        st.warning("Diagram could not be rendered (syntax error). Falling back to code:")
+        st.code(code, language="mermaid")
 
 def render_graphviz(code: str):
     """Renders DOT Graphviz diagram using Streamlit native widget."""
     try:
-        st.graphviz_chart(code)
+        st.graphviz_chart(code, use_container_width=False)
     except Exception as e:
         st.error(f"Error rendering Graphviz diagram: {e}")
         st.code(code, language="dot")
 
 def render_plantuml(code: str):
     """Renders PlantUML diagram using the remote PlantUML image API."""
+    import urllib.request
     try:
         encoded = plantuml_encode(code)
-        url = f"https://www.plantuml.com/plantuml/svg/{encoded}"
-        st.image(url, use_container_width=True)
+        url = f"https://www.plantuml.com/plantuml/png/{encoded}"
+        
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            img_data = response.read()
+            
+        b64 = base64.b64encode(img_data).decode('utf-8')
+        st.markdown(f'<div style="text-align: center; margin: 15px 0;"><img src="data:image/png;base64,{b64}" style="max-width: 100%; height: auto; max-height: 500px; display: block; margin: 0 auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"/></div>', unsafe_allow_html=True)
     except Exception as e:
-        st.error(f"Error rendering PlantUML diagram: {e}")
+        st.warning("Diagram could not be rendered (syntax error). Falling back to code:")
         st.code(code, language="plantuml")
 
 def render_d2(code: str):
@@ -106,10 +116,10 @@ def render_inline_diagram(lang: str, code: str):
 
 def display_response_with_diagrams(text: str):
     """
-    Splits the Markdown response and renders sections sequentially,
-    replacing diagram fenced blocks with their actual rendered component widgets.
-    """
-    pattern = r"```(mermaid|graphviz|dot|plantuml|d2)\s*\n(.*?)\n```"
+     Splits the Markdown response and renders sections sequentially,
+     replacing diagram fenced blocks with their actual rendered component widgets.
+     """
+    pattern = r"```(mermaid|graphviz|dot|plantuml|d2)\b[^\n]*\r?\n(.*?)\r?\n\s*```"
     parts = re.split(pattern, text, flags=re.DOTALL | re.IGNORECASE)
     
     i = 0
@@ -172,7 +182,7 @@ def render_chat_interface(client: QdrantClient):
                 cols = st.columns(min(len(msg["images"]), 3))
                 for i, img_path in enumerate(msg["images"]):
                     with cols[i % 3]:
-                        st.image(img_path)
+                        st.image(img_path, use_container_width=True)
                         
             if msg.get("references"):
                 with st.expander("🔍 Verified Context References"):
@@ -215,6 +225,22 @@ def render_chat_interface(client: QdrantClient):
                             st.success("Response updated!")
                             st.rerun()
 
+    # Render confirmation message & buttons if awaiting diagram confirmation
+    if st.session_state.get("awaiting_diagram_confirmation", False):
+        with st.chat_message("assistant"):
+            st.markdown("Would you like a diagram included in the answer?")
+            confirm_col1, confirm_col2 = st.columns(2)
+            with confirm_col1:
+                if st.button("Yes, include a diagram", key="confirm_diagram_yes"):
+                    st.session_state.awaiting_diagram_confirmation = False
+                    st.session_state.diagram_confirmation_choice = "Yes"
+                    st.rerun()
+            with confirm_col2:
+                if st.button("No, text only", key="confirm_diagram_no"):
+                    st.session_state.awaiting_diagram_confirmation = False
+                    st.session_state.diagram_confirmation_choice = "No"
+                    st.rerun()
+
     # 1. Check if we have a confirmation choice from a previous interaction
     confirm_choice = st.session_state.get("diagram_confirmation_choice")
     if confirm_choice is not None:
@@ -235,7 +261,8 @@ def render_chat_interface(client: QdrantClient):
             _handle_rag_query(client, query, selected_file, diagram_tool=None)
 
     # 2. Otherwise handle new input
-    elif query := st.chat_input("Ask a question about your study documents..."):
+    query = st.chat_input("Ask a question about your study documents...")
+    if query:
         # Store and display user query
         add_message("user", query)
         with st.chat_message("user"):
@@ -355,7 +382,7 @@ def _handle_image_query(query: str, page_num: int | str | None, selected_file: s
         cols = st.columns(min(len(image_files), 3))
         for i, img_path in enumerate(image_files):
             with cols[i % 3]:
-                st.image(img_path, caption=f"Image {i+1}")
+                st.image(img_path, caption=f"Image {i+1}", use_container_width=True)
 
 def _handle_rag_query(client: QdrantClient, query: str, selected_file: str, diagram_tool: str | None = None):
     with st.spinner("Querying local vector database & invoking Groq LLM..."):

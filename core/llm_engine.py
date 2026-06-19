@@ -64,7 +64,7 @@ def generate_study_response(query: str, context: str, diagram_tool: str | None =
             f"2. IMPORTANT: Place this code block inline at the most relevant position within your response text (e.g., immediately "
             f"after the paragraph or section it explains/supports), rather than just putting it at the very end.\n"
             f"3. Make sure the code is syntax-valid for {diagram_tool}.\n"
-            f"   - Mermaid: Use clean Mermaid syntax (e.g., `graph TD` or `sequenceDiagram`).\n"
+            f"   - Mermaid: STRICT SYNTAX RULES: Use `graph TD` or `sequenceDiagram`. Node IDs (the part outside brackets) MUST be simple alphanumeric words WITHOUT spaces or quotes (e.g., `A`, `Node1`). NEVER use quotes, spaces, or special characters in the Node ID itself! You MUST wrap the text label of EVERY SINGLE node in double quotes (e.g., `A[\"Raw Data\"]` or `Node1[\"Linear Combination (z)\"]`). NEVER write a node label without double quotes if it contains spaces, parentheses, symbols, numbers, punctuation, or arrows. Do NOT use HTML tags inside node text.\n"
             f"   - Graphviz: Use clean DOT language syntax (e.g., `digraph G {{ ... }}`).\n"
             f"   - PlantUML: Use valid PlantUML syntax enclosed in `@startuml` and `@enduml`.\n"
             f"   - D2: Use valid D2 syntax (e.g., `x -> y`).\n"

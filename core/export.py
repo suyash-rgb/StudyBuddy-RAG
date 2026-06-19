@@ -18,13 +18,35 @@ def encode_kroki(source: str) -> str:
     compressed = compressor.compress(source.encode('utf-8')) + compressor.flush()
     return base64.urlsafe_b64encode(compressed).decode('ascii')
 
+def sanitize_mermaid_code(code: str) -> str:
+    """Sanitizes Mermaid diagram code by double-quoting unquoted node text to avoid syntax errors."""
+    lines = []
+    for line in code.splitlines():
+        if not line.strip() or line.strip().startswith("%%"):
+            lines.append(line)
+            continue
+        # 1. Replace square brackets A[text] -> A["text"]
+        line = re.sub(r'\b([a-zA-Z0-9_\-]+)\s*\[\s*([^"\]]+?)\s*\]', r'\1["\2"]', line)
+        # 2. Replace curly brackets A{text} -> A{"text"}
+        line = re.sub(r'\b([a-zA-Z0-9_\-]+)\s*\{\s*([^"\}]+?)\s*\}', r'\1{"\2"}', line)
+        # 3. Replace rounded brackets A(text) -> A("text") but skip if inside double quotes
+        def replace_round(m):
+            before = line[:m.start()]
+            if before.count('"') % 2 == 1:
+                return m.group(0)
+            return f'{m.group(1)}("{m.group(2)}")'
+            
+        line = re.compile(r'\b([a-zA-Z0-9_\-]+)\s*\(\s*([^"\)]+?)\s*\)').sub(replace_round, line)
+        lines.append(line)
+    return "\n".join(lines)
+
 def replace_diagrams_with_images_for_pdf(text: str, temp_files_list: list) -> str:
     """
     Finds diagram code blocks (Mermaid, Graphviz, PlantUML, D2) in markdown response text,
     fetches rendered SVG images from Kroki API, saves them locally, and replaces the
     code block with a local HTML <img> tag.
     """
-    pattern = r"```(mermaid|graphviz|dot|plantuml|d2)\s*\n(.*?)\n```"
+    pattern = r"```(mermaid|graphviz|dot|plantuml|d2)\b[^\n]*\r?\n(.*?)\r?\n\s*```"
     
     def repl(match):
         lang = match.group(1).lower()
@@ -34,25 +56,49 @@ def replace_diagrams_with_images_for_pdf(text: str, temp_files_list: list) -> st
         kroki_lang = "graphviz" if lang == "dot" else lang
         
         try:
-            encoded = encode_kroki(code)
-            # Use SVG format for vector scaling in the PDF document
-            url = f"https://kroki.io/{kroki_lang}/svg/{encoded}"
+            if lang == "mermaid":
+                import json
+                code = sanitize_mermaid_code(code)
+                payload = json.dumps({"code": code, "mermaid": {"theme": "default"}}).encode("utf-8")
+                encoded = base64.urlsafe_b64encode(payload).decode("ascii").replace("=", "")
+                url = f"https://mermaid.ink/svg/{encoded}"
+            else:
+                encoded = encode_kroki(code)
+                # Use SVG format for vector scaling in the PDF document
+                url = f"https://kroki.io/{kroki_lang}/svg/{encoded}"
             
-            # Request image from Kroki
-            req = urllib.request.Request(url, headers={'User-Agent': 'PdfInsight/1.0'})
+            # Request image from API
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=10) as response:
                 img_data = response.read()
                 
-            # Write to a temp file
-            with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as f:
+            # Write to a temp file in a known relative directory
+            os.makedirs("temp_exports", exist_ok=True)
+            with tempfile.NamedTemporaryFile(dir="temp_exports", suffix=".svg", delete=False) as f:
                 f.write(img_data)
-                temp_path = f.name
+                temp_svg_path = f.name
                 
-            temp_files_list.append(temp_path)
-            abs_path = os.path.abspath(temp_path).replace(os.sep, "/")
-            return f'<div style="text-align: center; margin: 15px 0;"><img src="file:///{abs_path}" style="max-width: 100%; height: auto; max-height: 400px; display: block; margin: 0 auto;"/></div>'
+            # Convert SVG to PNG since PyMuPDF Story doesn't natively render SVG in img tags
+            temp_png_path = temp_svg_path.replace(".svg", ".png")
+            try:
+                doc_svg = pymupdf.open(temp_svg_path)
+                pix = doc_svg[0].get_pixmap(dpi=150)
+                pix.save(temp_png_path)
+                doc_svg.close()
+                # Clean up the SVG immediately
+                if os.path.exists(temp_svg_path):
+                    os.remove(temp_svg_path)
+                temp_files_list.append(temp_png_path)
+                rel_path = os.path.relpath(temp_png_path, os.getcwd()).replace(os.sep, "/")
+            except Exception as convert_err:
+                logger.error(f"Failed to convert SVG to PNG for PDF: {convert_err}")
+                # Fallback to the SVG path
+                temp_files_list.append(temp_svg_path)
+                rel_path = os.path.relpath(temp_svg_path, os.getcwd()).replace(os.sep, "/")
+
+            return f'<div style="text-align: center; margin: 15px 0;"><img src="{rel_path}" style="max-width: 100%; height: auto; max-height: 400px; display: block; margin: 0 auto;"/></div>'
         except Exception as e:
-            logger.error(f"Failed to render diagram to SVG image via Kroki for PDF: {e}")
+            logger.error(f"Failed to render diagram to SVG image for PDF: {e}")
             # Fallback: return standard fenced code block if rendering fails
             return match.group(0)
             
@@ -86,8 +132,8 @@ def export_conversation_to_pdf() -> bytes:
             html_msg += '<div style="margin-top: 15px; text-align: center;">'
             for img_path in msg["images"]:
                 if os.path.exists(img_path):
-                    abs_path = os.path.abspath(img_path).replace(os.sep, "/")
-                    html_msg += f'<div style="margin-bottom: 10px;"><img src="file:///{abs_path}" style="max-width: 100%; height: auto; max-height: 350px; display: block; margin: 0 auto;"/></div>'
+                    rel_path = os.path.relpath(img_path, os.getcwd()).replace(os.sep, "/")
+                    html_msg += f'<div style="margin-bottom: 10px;"><img src="{rel_path}" style="max-width: 100%; height: auto; max-height: 350px; display: block; margin: 0 auto;"/></div>'
             html_msg += '</div>'
             
         assistant_msgs.append(html_msg)
@@ -130,7 +176,7 @@ def export_conversation_to_pdf() -> bytes:
         MEDIABOX = pymupdf.paper_rect("letter")
         WHERE = MEDIABOX + (36, 36, -36, -36) # Margins
         
-        story = pymupdf.Story(html=styled_html)
+        story = pymupdf.Story(html=styled_html, archive=pymupdf.Archive(os.getcwd()))
         writer = pymupdf.DocumentWriter(temp_pdf_path)
         
         more = 1
