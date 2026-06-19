@@ -42,6 +42,9 @@ def _handle_clear_database(client: QdrantClient):
         if os.path.exists("extracted_images"):
             shutil.rmtree("extracted_images", ignore_errors=True)
             
+        from core.llm_engine import clear_document_vocabulary
+        clear_document_vocabulary()
+            
         st.success("Database and ephemeral images successfully cleared!")
         clear_messages()
         clear_indexed_files()
@@ -92,6 +95,9 @@ def _handle_process_documents(client: QdrantClient, uploaded_files):
                     
                     for file in uploaded_files:
                         add_indexed_file(file.name)
+                        
+                    from core.llm_engine import update_document_vocabulary
+                    update_document_vocabulary(documents)
                         
                     logger.info("Indexing completed successfully!")
                     st.sidebar.success(f"Successfully indexed {len(documents)} pages from {len(uploaded_files)} file(s)!")

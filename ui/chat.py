@@ -2,13 +2,129 @@ import logging
 import re
 import os
 import glob
+import html
+import zlib
+import base64
+import string
 import streamlit as st
+import streamlit.components.v1 as components
 from qdrant_client import QdrantClient
 from qdrant_client import models
 from core.llm_engine import generate_study_response
 from core.session import get_messages, add_message, get_indexed_files
 
 logger = logging.getLogger(__name__)
+
+def plantuml_encode(plantuml_text: str) -> str:
+    """Compress and encode PlantUML text for a PlantUML server."""
+    plantuml_alphabet = string.digits + string.ascii_uppercase + string.ascii_lowercase + '-_'
+    base64_alphabet = string.ascii_uppercase + string.ascii_lowercase + string.digits + '+/'
+    
+    trans_table = bytes.maketrans(base64_alphabet.encode('utf-8'), plantuml_alphabet.encode('utf-8'))
+    
+    # 1. Deflate compression
+    zlibbed_str = zlib.compress(plantuml_text.encode('utf-8'))
+    
+    # 2. Remove zlib header/footer
+    compressed_string = zlibbed_str[2:-4]
+    
+    # 3. Base64 encode and translate to PlantUML alphabet
+    return base64.b64encode(compressed_string).translate(trans_table).decode('utf-8')
+
+def render_mermaid(code: str):
+    """Renders Mermaid diagram in a Streamlit HTML component."""
+    escaped_code = html.escape(code)
+    html_content = f"""
+    <div class="mermaid" style="background-color: transparent;">
+    {escaped_code}
+    </div>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({{ 
+            startOnLoad: true,
+            theme: 'default',
+            securityLevel: 'loose'
+        }});
+    </script>
+    """
+    components.html(html_content, height=450, scrolling=True)
+
+def render_graphviz(code: str):
+    """Renders DOT Graphviz diagram using Streamlit native widget."""
+    try:
+        st.graphviz_chart(code)
+    except Exception as e:
+        st.error(f"Error rendering Graphviz diagram: {e}")
+        st.code(code, language="dot")
+
+def render_plantuml(code: str):
+    """Renders PlantUML diagram using the remote PlantUML image API."""
+    try:
+        encoded = plantuml_encode(code)
+        url = f"https://www.plantuml.com/plantuml/svg/{encoded}"
+        st.image(url, use_container_width=True)
+    except Exception as e:
+        st.error(f"Error rendering PlantUML diagram: {e}")
+        st.code(code, language="plantuml")
+
+def render_d2(code: str):
+    """Renders D2 diagram in a Streamlit HTML component using WASM via CDN."""
+    js_safe_code = code.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+    html_content = f"""
+    <div id="d2-container" style="width: 100%; height: 100%;">Rendering D2 Diagram...</div>
+    <script type="module">
+        import {{ D2 }} from 'https://esm.sh/@terrastruct/d2';
+        
+        async function init() {{
+            try {{
+                const d2 = new D2();
+                const code = `{js_safe_code}`;
+                const result = await d2.compile(code);
+                const svg = await d2.render(result.diagram, result.renderOptions);
+                const container = document.getElementById('d2-container');
+                container.innerHTML = svg;
+            }} catch (err) {{
+                document.getElementById('d2-container').innerHTML = '<pre style="color:red;">Error: ' + err.message + '</pre>';
+            }}
+        }}
+        init();
+    </script>
+    """
+    components.html(html_content, height=450, scrolling=True)
+
+def render_inline_diagram(lang: str, code: str):
+    """Routes the diagram rendering to the appropriate tool renderer."""
+    lang = lang.lower().strip()
+    if lang == "mermaid":
+        render_mermaid(code)
+    elif lang in ("graphviz", "dot"):
+        render_graphviz(code)
+    elif lang == "plantuml":
+        render_plantuml(code)
+    elif lang == "d2":
+        render_d2(code)
+
+def display_response_with_diagrams(text: str):
+    """
+    Splits the Markdown response and renders sections sequentially,
+    replacing diagram fenced blocks with their actual rendered component widgets.
+    """
+    pattern = r"```(mermaid|graphviz|dot|plantuml|d2)\s*\n(.*?)\n```"
+    parts = re.split(pattern, text, flags=re.DOTALL | re.IGNORECASE)
+    
+    i = 0
+    while i < len(parts):
+        normal_text = parts[i]
+        if normal_text.strip():
+            st.markdown(normal_text, unsafe_allow_html=True)
+            
+        if i + 2 < len(parts):
+            lang = parts[i+1]
+            code = parts[i+2]
+            render_inline_diagram(lang, code)
+            i += 3
+        else:
+            i += 1
 
 def render_chat_interface(client: QdrantClient):
     """Renders the chat history and input, handling RAG execution."""
@@ -22,49 +138,121 @@ def render_chat_interface(client: QdrantClient):
         selected_file = st.selectbox("Search Context (Filter by File)", ["All Documents"] + indexed_files)
         st.markdown("<br>", unsafe_allow_html=True)
 
-    for msg in messages:
+    # Place settings at the stable top of the chat area to avoid layout shifts
+    st.markdown("**⚙️ Query Options & Tools**")
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        add_diagram = st.toggle("Enable Diagram Generation", value=st.session_state.get("add_diagram", False), key="add_diagram")
+    with col2:
+        messages = get_messages()
+        if messages:
+            if st.button("📥 Prepare PDF Export", use_container_width=True):
+                with st.spinner("Generating PDF..."):
+                    from core.export import export_conversation_to_pdf
+                    st.session_state.pdf_bytes = export_conversation_to_pdf()
+            if "pdf_bytes" in st.session_state:
+                st.download_button(
+                    label="Download PDF",
+                    data=st.session_state.pdf_bytes,
+                    file_name="conversation_export.pdf",
+                    mime="application/pdf",
+                    type="primary",
+                    use_container_width=True
+                )
+    st.markdown("---")
+
+    for idx, msg in enumerate(messages):
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"], unsafe_allow_html=True)
+            if msg["role"] == "assistant":
+                display_response_with_diagrams(msg["content"])
+            else:
+                st.markdown(msg["content"], unsafe_allow_html=True)
             
             if msg.get("images"):
                 cols = st.columns(min(len(msg["images"]), 3))
                 for i, img_path in enumerate(msg["images"]):
                     with cols[i % 3]:
-                        st.image(img_path, use_container_width=True)
+                        st.image(img_path)
                         
             if msg.get("references"):
                 with st.expander("🔍 Verified Context References"):
-                    for idx, ref in enumerate(msg["references"]):
-                        st.markdown(f"**Reference {idx+1}:** {ref['filename']} (Page {ref['page_num']}) - *Similarity: {ref['score']:.2f}*")
+                    for idx_ref, ref in enumerate(msg["references"]):
+                        st.markdown(f"**Reference {idx_ref+1}:** {ref['filename']} (Page {ref['page_num']}) - *Similarity: {ref['score']:.2f}*")
                         st.code(ref["text"], language="text")
 
-    # Export Conversation Button (Bottom Right)
-    if messages:
-        col1, col2, col3 = st.columns([6, 2, 2])
-        with col3:
-            from core.export import export_conversation_to_pdf
-            st.download_button(
-                label="📥 Export PDF",
-                data=export_conversation_to_pdf(),
-                file_name="conversation_export.pdf",
-                mime="application/pdf",
-                width="stretch"
-            )
+            # Inline Edit Response & Add Notes (only for assistant messages)
+            if msg["role"] == "assistant":
+                with st.expander("📝 Edit Response & Add Notes"):
+                    edited_content = st.text_area(
+                        "Edit Response Markdown",
+                        value=msg["content"],
+                        key=f"edit_text_{idx}",
+                        height=150
+                    )
+                    
+                    uploaded_image = st.file_uploader(
+                        "Upload and embed custom image",
+                        type=["png", "jpg", "jpeg"],
+                        key=f"upload_image_{idx}"
+                    )
+                    
+                    if uploaded_image:
+                        os.makedirs("uploaded_images", exist_ok=True)
+                        img_path = os.path.join("uploaded_images", uploaded_image.name)
+                        with open(img_path, "wb") as f:
+                            f.write(uploaded_image.read())
+                        
+                        if "images" not in msg:
+                            msg["images"] = []
+                        if img_path not in msg["images"]:
+                            msg["images"].append(img_path)
+                            st.success(f"Uploaded {uploaded_image.name}!")
+                            st.rerun()
+                            
+                    if edited_content != msg["content"]:
+                        if st.button("Save Changes", key=f"save_edit_{idx}"):
+                            msg["content"] = edited_content
+                            st.success("Response updated!")
+                            st.rerun()
 
-    # Chat Input & RAG Execution
-    if query := st.chat_input("Ask a question about your study documents..."):
+    # 1. Check if we have a confirmation choice from a previous interaction
+    confirm_choice = st.session_state.get("diagram_confirmation_choice")
+    if confirm_choice is not None:
+        query = st.session_state.get("pending_query")
+        selected_file = st.session_state.get("pending_selected_file")
+        
+        # Clear state variables first
+        st.session_state.diagram_confirmation_choice = None
+        st.session_state.pending_query = None
+        st.session_state.pending_selected_file = None
+        
+        if confirm_choice == "Yes":
+            from core.llm_engine import select_diagram_tool
+            with st.spinner("Selecting diagram tool..."):
+                tool = select_diagram_tool(query)
+            _handle_rag_query(client, query, selected_file, diagram_tool=tool)
+        else:
+            _handle_rag_query(client, query, selected_file, diagram_tool=None)
+
+    # 2. Otherwise handle new input
+    elif query := st.chat_input("Ask a question about your study documents..."):
         # Store and display user query
         add_message("user", query)
         with st.chat_message("user"):
             st.markdown(query)
             
-        # Check for Image Interception via LLM Intent (Bypass RAG)
-        from core.llm_engine import classify_image_intent
+        # Check for Intent (Spam Check + Image Interception)
+        from core.llm_engine import analyze_query_intent
         
         with st.spinner("Analyzing intent..."):
-            intent = classify_image_intent(query)
+            intent = analyze_query_intent(query)
             
-        if intent.get("is_image_query"):
+        if intent.get("is_bogus"):
+            msg = "⚠️ Please try paraphrasing and ask again."
+            add_message("assistant", msg)
+            with st.chat_message("assistant"):
+                st.markdown(msg)
+        elif intent.get("is_image_query"):
             page_num = intent.get("page_num")
             _handle_image_query(query, page_num, selected_file, client)
         else:
@@ -74,7 +262,25 @@ def render_chat_interface(client: QdrantClient):
                     logger.warning("Query rejected because Qdrant client is not available.")
                     st.error("Database client is not available. Check configuration details.")
             else:
-                _handle_rag_query(client, query, selected_file)
+                if add_diagram:
+                    from core.llm_engine import detect_diagram_scope
+                    with st.spinner("Detecting diagram scope..."):
+                        scope = detect_diagram_scope(query)
+                        
+                    if scope == "Yes":
+                        from core.llm_engine import select_diagram_tool
+                        with st.spinner("Selecting diagram tool..."):
+                            tool = select_diagram_tool(query)
+                        _handle_rag_query(client, query, selected_file, diagram_tool=tool)
+                    elif scope == "Ambiguous":
+                        st.session_state.awaiting_diagram_confirmation = True
+                        st.session_state.pending_query = query
+                        st.session_state.pending_selected_file = selected_file
+                        st.rerun()
+                    else:  # No
+                        _handle_rag_query(client, query, selected_file, diagram_tool=None)
+                else:
+                    _handle_rag_query(client, query, selected_file, diagram_tool=None)
 
 def _handle_image_query(query: str, page_num: int | str | None, selected_file: str, client: QdrantClient):
     if not selected_file or selected_file == "All Documents":
@@ -149,9 +355,9 @@ def _handle_image_query(query: str, page_num: int | str | None, selected_file: s
         cols = st.columns(min(len(image_files), 3))
         for i, img_path in enumerate(image_files):
             with cols[i % 3]:
-                st.image(img_path, caption=f"Image {i+1}", use_container_width=True)
+                st.image(img_path, caption=f"Image {i+1}")
 
-def _handle_rag_query(client: QdrantClient, query: str, selected_file: str):
+def _handle_rag_query(client: QdrantClient, query: str, selected_file: str, diagram_tool: str | None = None):
     with st.spinner("Querying local vector database & invoking Groq LLM..."):
         try:
             # Check point count to determine if DB is empty
@@ -209,11 +415,11 @@ def _handle_rag_query(client: QdrantClient, query: str, selected_file: str):
                 context_str = "\n\n---\n\n".join(context_blocks)
                 
                 # Generate response via Groq
-                answer = generate_study_response(query, context_str)
+                answer = generate_study_response(query, context_str, diagram_tool=diagram_tool)
                 
-                # Render assistant response with unsafe_allow_html=True for tables and <br>
+                # Render assistant response with diagrams
                 with st.chat_message("assistant"):
-                    st.markdown(answer, unsafe_allow_html=True)
+                    display_response_with_diagrams(answer)
                     with st.expander("🔍 Verified Context References"):
                         for idx, ref in enumerate(references):
                             st.markdown(f"**Reference {idx+1}:** {ref['filename']} (Page {ref['page_num']}) - *Similarity: {ref['score']:.2f}*")

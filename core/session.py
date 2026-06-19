@@ -6,6 +6,14 @@ def init_session_state():
         st.session_state.messages = []
     if "indexed_files" not in st.session_state:
         st.session_state.indexed_files = []
+    if "awaiting_diagram_confirmation" not in st.session_state:
+        st.session_state.awaiting_diagram_confirmation = False
+    if "pending_query" not in st.session_state:
+        st.session_state.pending_query = None
+    if "pending_selected_file" not in st.session_state:
+        st.session_state.pending_selected_file = None
+    if "diagram_confirmation_choice" not in st.session_state:
+        st.session_state.diagram_confirmation_choice = None
 
 def get_messages():
     """Returns the current list of chat messages."""

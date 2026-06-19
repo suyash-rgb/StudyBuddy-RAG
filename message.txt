@@ -1,6 +1,44 @@
-fix: universal image storage and UI deprecation warnings
+feat: Inline Diagram Generation
 
-- Fix `core/parser.py` to securely cache embedded image blobs from `.docx` and `.pptx` files to the local ephemeral directory.
-- Update raw image parsers (`.png`, `.jpg`) to correctly cache image files into local storage for hybrid retrieval.
-- Fix Streamlit 1.33+ deprecation warnings globally by replacing `use_container_width=True` with `width="stretch"` across `ui/chat.py` and `ui/sidebar.py`.
-- Update hardcoded 'PDF' upload placeholder string to be universally applicable for all documents.
+We have successfully implemented inline diagramming and interactive notes features in PDFInsight. The academic tutor can now explain complex visual structures, workflows, networks, and UML designs dynamically.
+
+ Key Accomplishments
+
+# 1. Multilevel Classification Pipeline
+- Scope Detection (`detect_diagram_scope`): When the "Add Diagrams" checkbox is enabled, PDFInsight uses a fast LLM classification call to decide if the query has scope for a diagram. If the query contains heuristic keywords (e.g., `workflow`, `process`, `flowchart`, `loop`, `diagram`, `pipeline`, `architecture`) but the LLM returns "No", it gracefully maps it to Ambiguous.
+- Interactive Scope Dialog: Ambiguous queries prompt the user directly in the chat with interactive "Yes, include a diagram" and "No, text only" buttons. Choosing a button reruns the app and triggers the correct generation path.
+- Tool Selection (`select_diagram_tool`): If diagram scope is positive, the system determines the optimal tool for the prompt structure:
+  - Mermaid: Flowcharts, state transitions, sequential loops, simple sequence diagrams.
+  - Graphviz: Network topologies, complex node-edge connections, mathematical graphs.
+  - PlantUML: Software engineering UML (classes, structures, sequence lifecycles).
+  - D2: High-level systems architecture, org charts, directory/tree layouts.
+
+# 2. High-Performance Inline Rendering
+Fenced code blocks inside LLM responses are parsed dynamically and rendered using zero-dependency, web-based layouts:
+- Mermaid & D2: Rendered dynamically using secure browser-native WebAssembly (WASM) and ESM loaders embedded inside clean Streamlit HTML iframes.
+- Graphviz: Rendered using Streamlit's built-in `st.graphviz_chart()` engine.
+- PlantUML: Encoded via a custom Python zlib-deflate translation algorithm and requested dynamically as an SVG from the official public PlantUML rendering service.
+
+# 3. Response Editing & Annotations
+Every assistant response features an inline `📝 Edit Response & Add Notes` expander:
+- Users can directly modify the markdown content of the response and save changes.
+- Users can upload local images (`.png`, `.jpg`, `.jpeg`) to annotate the response. Uploaded images are stored under `uploaded_images/` and appended in the chat layout.
+
+# 4. PDF Conversation Export with Rendered Diagrams
+We updated `core/export.py` to compile the entire conversation history:
+- Diagram blocks are intercepted, compressed, URL-safe Base64 encoded using raw DEFLATE, and sent to Kroki.io to retrieve high-quality SVG vector graphics.
+- Uploaded custom annotation images are referenced via their local file system paths.
+- Temporary files are rendered into the final multipage PDF using PyMuPDF and cleaned up immediately after compilation.
+
+---
+
+ Verification & Testing
+
+1. Automated Intent Tests:
+   - Ran `python -m core.test_intent` (with virtual environment and UTF-8 encoding). 18/18 tests passed successfully, confirming zero regressions to the fast non-LLM gibberish classifier.
+2. Ambiguous Flow Verification:
+   - Submitted a query with borderline intent, verified the "Yes" and "No" buttons rendered, and verified that clicking "Yes" triggered tool classification and diagram compilation while "No" returned standard text.
+3. Kroki API & Raw Deflate:
+   - Fixed zlib header overhead by switching to raw DEFLATE (`wbits=-15`), which successfully corrected Kroki SVG rendering requests, eliminating the previous `HTTP 400 Bad Request` issues.
+4. PDF Output:
+   - Exported the conversation to PDF and verified that PyMuPDF correctly embedded inline Mermaid, D2, PlantUML, and Graphviz vector SVGs, alongside notes and uploaded custom images.
