@@ -15,35 +15,6 @@ def render_chat_interface(client: QdrantClient):
     # Display Chat History
     messages = get_messages()
     
-    indexed_files = get_indexed_files()
-    selected_file = "All Documents"
-    if indexed_files:
-        selected_file = st.selectbox("Search Context (Filter by File)", ["All Documents"] + indexed_files)
-        st.markdown("<br>", unsafe_allow_html=True)
-
-    # Place settings at the stable top of the chat area to avoid layout shifts
-    st.markdown("**⚙️ Query Options & Tools**")
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        add_diagram = st.toggle("Enable Diagram Generation", value=st.session_state.get("add_diagram", False), key="add_diagram")
-    with col2:
-        messages = get_messages()
-        if messages:
-            if st.button("📥 Prepare PDF Export", use_container_width=True):
-                with st.spinner("Generating PDF..."):
-                    from core.export import export_conversation_to_pdf
-                    st.session_state.pdf_bytes = export_conversation_to_pdf()
-            if "pdf_bytes" in st.session_state:
-                st.download_button(
-                    label="Download PDF",
-                    data=st.session_state.pdf_bytes,
-                    file_name="conversation_export.pdf",
-                    mime="application/pdf",
-                    type="primary",
-                    use_container_width=True
-                )
-    st.markdown("---")
-    
     # If there are no messages, add a flexible spacer to push the input box down without overflowing
     if not messages:
         st.markdown('<div style="height: 25vh;"></div>', unsafe_allow_html=True)
@@ -122,6 +93,66 @@ def render_chat_interface(client: QdrantClient):
                     st.session_state.diagram_confirmation_choice = "No"
                     st.rerun()
     
+    # Ensure session state defaults exist
+    if "selected_file_val" not in st.session_state:
+        st.session_state.selected_file_val = "All Documents"
+    if "add_diagram_val" not in st.session_state:
+        st.session_state.add_diagram_val = False
+
+    st.markdown("""
+        <div id="gear-btn-wrapper"></div>
+        <style>
+        div.element-container:has(#gear-btn-wrapper) + div.element-container button {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            width: auto !important;
+        }
+        div.element-container:has(#gear-btn-wrapper) + div.element-container button p {
+            font-size: 1.5rem !important;
+            margin: 0 !important;
+        }
+        div.element-container:has(#gear-btn-wrapper) + div.element-container button:hover {
+            color: #1f77b4 !important;
+            background: transparent !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    if st.button("⚙️", help="Query Options & Tools"):
+        st.session_state.show_query_options = not st.session_state.get("show_query_options", False)
+        st.rerun()
+
+    if st.session_state.get("show_query_options", False):
+        with st.container(border=False):
+            indexed_files = get_indexed_files()
+            if indexed_files:
+                st.selectbox("Search Context (Filter by File)", ["All Documents"] + indexed_files, key="selected_file_val")
+                st.markdown("<br>", unsafe_allow_html=True)
+
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                st.toggle("Enable Diagram Generation", key="add_diagram_val")
+            with col2:
+                if messages:
+                    if st.button("📥 Prepare PDF Export", use_container_width=True):
+                        with st.spinner("Generating PDF..."):
+                            from core.export import export_conversation_to_pdf
+                            st.session_state.pdf_bytes = export_conversation_to_pdf()
+                    if "pdf_bytes" in st.session_state:
+                        st.download_button(
+                            label="Download PDF",
+                            data=st.session_state.pdf_bytes,
+                            file_name="conversation_export.pdf",
+                            mime="application/pdf",
+                            type="primary",
+                            use_container_width=True
+                        )
+
+    selected_file = st.session_state.selected_file_val
+    add_diagram = st.session_state.add_diagram_val
+
     # 1. Check if we have a confirmation choice from a previous interaction
     confirm_choice = st.session_state.get("diagram_confirmation_choice")
     if confirm_choice is not None:

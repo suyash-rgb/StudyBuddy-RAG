@@ -1,0 +1,8 @@
+fix: Query Options & Tools UI Placement
+
+moved the "Query Options & Tools" section to a sleek, collapsible menu (an expander) located at the very bottom of the chat history, right above the input box.
+
+Instead of rendering a floating menu that overlaps the input box, clicking the gear now opens a structured st.container() that is physically part of the page layout. 
+It naturally pushes the chat input box down rather than overlapping it, meaning the typing area is never obscured.
+
+The menu is now completely clean and borderless, appearing seamlessly below the transparent gear icon.
