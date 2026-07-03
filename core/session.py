@@ -14,6 +14,8 @@ def init_session_state():
         st.session_state.pending_selected_file = None
     if "diagram_confirmation_choice" not in st.session_state:
         st.session_state.diagram_confirmation_choice = None
+    if "master_notes" not in st.session_state:
+        st.session_state.master_notes = ""
 
 def get_messages():
     """Returns the current list of chat messages."""

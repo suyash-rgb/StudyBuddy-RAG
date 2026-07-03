@@ -218,3 +218,80 @@ def export_conversation_to_pdf() -> bytes:
             logger.error(f"Failed to delete temporary PDF export file {temp_pdf_path}: {e}")
             
     return pdf_bytes
+
+def export_notes_to_pdf(notes_markdown: str) -> bytes:
+    """
+    Converts a single markdown string (the master notes) to HTML, resolves inline diagrams,
+    compiles the result, and generates a styled PDF using PyMuPDF.
+    """
+    if not notes_markdown or not notes_markdown.strip():
+        notes_markdown = "## Empty Notes\nNo content to export."
+        
+    temp_files_to_clean = []
+    
+    # Replace inline diagram code blocks with local SVG/PNG files
+    content_with_diagrams = replace_diagrams_with_images_for_pdf(notes_markdown, temp_files_to_clean)
+    
+    # Convert markdown text to HTML
+    html_content = markdown.markdown(content_with_diagrams, extensions=['tables', 'fenced_code'])
+    
+    # Premium styled HTML document layout
+    styled_html = f"""
+    <html>
+    <head>
+    <style>
+        body {{ font-family: Helvetica, sans-serif; padding: 15px; line-height: 1.6; color: #333333; }}
+        h1 {{ color: #1e3a8a; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; margin-bottom: 20px; }}
+        h2, h3 {{ color: #2c3e50; margin-top: 15px; }}
+        table {{ border-collapse: collapse; width: 100%; margin-top: 10px; margin-bottom: 20px; font-size: 11px; }}
+        th, td {{ border: 1px solid #cccccc; padding: 8px; text-align: left; }}
+        th {{ background-color: #f3f4f6; font-weight: bold; }}
+        code {{ background-color: #f3f4f6; padding: 2px 4px; border-radius: 4px; font-family: monospace; font-size: 12px; }}
+        pre {{ background-color: #f3f4f6; padding: 12px; border-radius: 6px; font-family: monospace; overflow-x: auto; font-size: 11px; }}
+        hr {{ margin-top: 30px; margin-bottom: 30px; border: 0; border-top: 1px solid #e5e7eb; }}
+        img {{ max-width: 100%; height: auto; display: block; margin: 0 auto; }}
+    </style>
+    </head>
+    <body>
+    <h1>Study Notes</h1><br/>
+    {html_content}
+    </body>
+    </html>
+    """
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        temp_pdf_path = tmp.name
+ 
+    try:
+        MEDIABOX = pymupdf.paper_rect("letter")
+        WHERE = MEDIABOX + (36, 36, -36, -36)
+        
+        story = pymupdf.Story(html=styled_html, archive=pymupdf.Archive(os.getcwd()))
+        writer = pymupdf.DocumentWriter(temp_pdf_path)
+        
+        more = 1
+        while more:
+            device = writer.begin_page(MEDIABOX)
+            more, _ = story.place(WHERE)
+            story.draw(device)
+            writer.end_page()
+            
+        writer.close()
+        
+        with open(temp_pdf_path, "rb") as f:
+            pdf_bytes = f.read()
+            
+    finally:
+        for path in temp_files_to_clean:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception:
+                pass
+        try:
+            if os.path.exists(temp_pdf_path):
+                os.remove(temp_pdf_path)
+        except Exception:
+            pass
+            
+    return pdf_bytes
