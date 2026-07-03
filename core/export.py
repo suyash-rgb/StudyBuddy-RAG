@@ -61,11 +61,10 @@ def replace_diagrams_with_images_for_pdf(text: str, temp_files_list: list) -> st
                 code = sanitize_mermaid_code(code)
                 payload = json.dumps({"code": code, "mermaid": {"theme": "default"}}).encode("utf-8")
                 encoded = base64.urlsafe_b64encode(payload).decode("ascii").replace("=", "")
-                url = f"https://mermaid.ink/svg/{encoded}"
+                url = f"https://mermaid.ink/img/{encoded}"
             else:
                 encoded = encode_kroki(code)
-                # Use SVG format for vector scaling in the PDF document
-                url = f"https://kroki.io/{kroki_lang}/svg/{encoded}"
+                url = f"https://kroki.io/{kroki_lang}/png/{encoded}"
             
             # Request image from API
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -74,29 +73,39 @@ def replace_diagrams_with_images_for_pdf(text: str, temp_files_list: list) -> st
                 
             # Write to a temp file in a known relative directory
             os.makedirs("temp_exports", exist_ok=True)
-            with tempfile.NamedTemporaryFile(dir="temp_exports", suffix=".svg", delete=False) as f:
+            with tempfile.NamedTemporaryFile(dir="temp_exports", suffix=".png", delete=False) as f:
                 f.write(img_data)
-                temp_svg_path = f.name
+                temp_png_path = f.name
                 
-            # Convert SVG to PNG since PyMuPDF Story doesn't natively render SVG in img tags
-            temp_png_path = temp_svg_path.replace(".svg", ".png")
+            temp_files_list.append(temp_png_path)
+            rel_path = os.path.relpath(temp_png_path, os.getcwd()).replace(os.sep, "/")
+            
+            # Calculate optimal dimensions using PIL
             try:
-                doc_svg = pymupdf.open(temp_svg_path)
-                pix = doc_svg[0].get_pixmap(dpi=150)
-                pix.save(temp_png_path)
-                doc_svg.close()
-                # Clean up the SVG immediately
-                if os.path.exists(temp_svg_path):
-                    os.remove(temp_svg_path)
-                temp_files_list.append(temp_png_path)
-                rel_path = os.path.relpath(temp_png_path, os.getcwd()).replace(os.sep, "/")
-            except Exception as convert_err:
-                logger.error(f"Failed to convert SVG to PNG for PDF: {convert_err}")
-                # Fallback to the SVG path
-                temp_files_list.append(temp_svg_path)
-                rel_path = os.path.relpath(temp_svg_path, os.getcwd()).replace(os.sep, "/")
+                from PIL import Image
+                with Image.open(temp_png_path) as img:
+                    w_px, h_px = img.size
+                
+                # 1 pixel = 1 point baseline gives good print readability
+                w_pt, h_pt = float(w_px), float(h_px)
+                
+                # Constrain to page dimensions (margins considered)
+                MAX_W, MAX_H = 500.0, 600.0
+                if w_pt > MAX_W:
+                    scale = MAX_W / w_pt
+                    w_pt *= scale
+                    h_pt *= scale
+                if h_pt > MAX_H:
+                    scale = MAX_H / h_pt
+                    w_pt *= scale
+                    h_pt *= scale
+                    
+                w_attr = f'width="{int(w_pt)}" height="{int(h_pt)}"'
+            except Exception as size_err:
+                logger.error(f"Failed to read image dimensions: {size_err}")
+                w_attr = 'width="100%"' # Fallback
 
-            return f'<div style="text-align: center; margin: 15px 0;"><img src="{rel_path}" style="max-width: 100%; height: auto; max-height: 400px; display: block; margin: 0 auto;"/></div>'
+            return f'<div style="text-align: center; margin: 15px 0;"><img src="{rel_path}" {w_attr} style="display: block; margin: 0 auto;"/></div>'
         except Exception as e:
             logger.error(f"Failed to render diagram to SVG image for PDF: {e}")
             # Fallback: return standard fenced code block if rendering fails

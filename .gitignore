@@ -85,3 +85,5 @@ Thumbs.db
 qdrant_db/
 # Ephemeral Image Storage
 extracted_images/
+temp_exports/
+uploaded_images/

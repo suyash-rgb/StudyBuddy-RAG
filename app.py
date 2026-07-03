@@ -11,7 +11,7 @@ load_dotenv()
 
 # Configure page layout and style
 st.set_page_config(
-    page_title="PdfInsight - Academic Study Assistant",
+    page_title="StudyBuddy - Academic Study Assistant",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -31,7 +31,7 @@ inject_custom_css()
 init_session_state()
 
 # Main application header
-st.title("📚 PdfInsight")
+st.title("📚 StudyBuddy")
 st.subheader("Lightweight Academic Study Assistant")
 
 # Initialize database client

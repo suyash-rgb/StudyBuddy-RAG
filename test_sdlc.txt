@@ -1,0 +1,5 @@
+Conversation Export
+Response 1
+Visual Overview of the SDLC
+The following Mermaid diagram illustrates the sequential ﬂow of the SDLC stages and
+highlights the key deliverables at each step.
