@@ -87,3 +87,6 @@ qdrant_db/
 extracted_images/
 temp_exports/
 uploaded_images/
+
+#PDFs
+*.pdf
