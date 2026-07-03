@@ -10,10 +10,21 @@ logger = logging.getLogger(__name__)
 def render_sidebar(client: QdrantClient):
     """Renders the sidebar for document upload and database maintenance."""
     with st.sidebar:
-        # Use vh (viewport height) for responsive vertical centering without scrollbars
-        st.markdown("<div style='height: 20vh;'></div>", unsafe_allow_html=True)
-        
-        
+        st.markdown("""
+            <style>
+            [data-testid="stSidebarUserContent"] {
+                padding-top: 2rem !important;
+            }
+            [data-testid="stSidebarContent"] {
+                overflow: hidden !important;
+            }
+            [data-testid="stSidebar"] ::-webkit-scrollbar {
+                display: none !important;
+                width: 0px !important;
+                background: transparent !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
         st.markdown("### 📤 Upload Study Material")
         uploaded_files = st.file_uploader(
             "Upload Lecture Notes, Textbooks, Slides or Images",
