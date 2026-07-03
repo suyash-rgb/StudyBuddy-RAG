@@ -47,30 +47,43 @@ except Exception as e:
 # Render UI Components
 render_sidebar(client)
 
-# Notes Panel Toggle Logic
-notes_open = st.session_state.get("notes_open", True)
+# Layout State: 0 (Chat Only), 1 (Split), 2 (Notes Only)
+layout_state = st.session_state.get("layout_state", 0)
 
-if notes_open:
-    col1, col_toggle, col2 = st.columns([1, 0.04, 1])
+if layout_state == 0:
+    col_chat, col_toggle = st.columns([1, 0.04])
     with col_toggle:
-        # Push the button down slightly to align with content
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        if st.button("❯", help="Collapse Notes Workspace", key="collapse_notes"):
-            st.session_state.notes_open = False
+        st.markdown("<br><br><br>", unsafe_allow_html=True)
+        if st.button("❮", help="Open Notes Workspace", key="open_notes", use_container_width=True):
+            st.session_state.layout_state = 1
             st.rerun()
             
-    with col1:
+    with col_chat:
         render_chat_interface(client)
-    with col2:
+
+elif layout_state == 1:
+    col_chat, col_toggle, col_notes = st.columns([1, 0.06, 1])
+    with col_toggle:
+        st.markdown("<br><br><br>", unsafe_allow_html=True)
+        if st.button("❯", help="Close Notes", key="close_notes", use_container_width=True):
+            st.session_state.layout_state = 0
+            st.rerun()
+        if st.button("❮", help="Expand Notes to Full Width", key="expand_notes_full", use_container_width=True):
+            st.session_state.layout_state = 2
+            st.rerun()
+            
+    with col_chat:
+        render_chat_interface(client)
+    with col_notes:
         render_notes_editor()
-else:
-    col1, col_toggle = st.columns([1, 0.04])
+
+elif layout_state == 2:
+    col_toggle, col_notes = st.columns([0.04, 1])
     with col_toggle:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        if st.button("❮", help="Expand Notes Workspace", key="expand_notes"):
-            st.session_state.notes_open = True
+        st.markdown("<br><br><br>", unsafe_allow_html=True)
+        if st.button("❯", help="Show Chat", key="show_chat", use_container_width=True):
+            st.session_state.layout_state = 1
             st.rerun()
             
-    # When closed, chat takes full width (minus the small toggle column)
-    with col1:
-        render_chat_interface(client)
+    with col_notes:
+        render_notes_editor()

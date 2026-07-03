@@ -1,8 +1,9 @@
-fix: Query Options & Tools UI Placement
+feat: 3-state dynamic workspace layout
 
-moved the "Query Options & Tools" section to a sleek, collapsible menu (an expander) located at the very bottom of the chat history, right above the input box.
+- Implemented a responsive 3-state layout system for Chat and Notes.
+- Moved Action Toolbar buttons to the bottom of the Notes editor.
+- Vertically aligned the Download Markdown and Prepare PDF buttons.
 
-Instead of rendering a floating menu that overlaps the input box, clicking the gear now opens a structured st.container() that is physically part of the page layout. 
-It naturally pushes the chat input box down rather than overlapping it, meaning the typing area is never obscured.
-
-The menu is now completely clean and borderless, appearing seamlessly below the transparent gear icon.
+Landing Page Mode (Default): Upon reloading, you will ONLY see the Sidebar + Chat (The Notes section stays completely out of the way to give you maximum focus).
+Split Workspace: When you click the initial ❮ side-arrow on the right, it slides open the Notes workspace, giving you a side-by-side view (Chat on the left, Notes on the right).
+Full Width Notes: Once the Notes area is open, a second set of side-arrows appears between them. You can click ❯ to close the Notes back down, OR click the new ❮ arrow to collapse the chat and expand your Notes to completely take over the full width of the screen!
