@@ -44,9 +44,9 @@ def render_chat_interface(client: QdrantClient):
                 )
     st.markdown("---")
     
-    # If there are no messages, add a spacer to push the input box to the bottom
+    # If there are no messages, add a flexible spacer to push the input box down without overflowing
     if not messages:
-        st.markdown("<br>" * 15, unsafe_allow_html=True)
+        st.markdown('<div style="height: 25vh;"></div>', unsafe_allow_html=True)
     
     for idx, msg in enumerate(messages):
         with st.chat_message(msg["role"]):
